@@ -1,0 +1,422 @@
+---
+title: "Menciones Recetas Alqueria, Junio-Julio 17"
+output: 
+  flexdashboard::flex_dashboard:
+    highlight: haddock
+    logo: logo.jpg
+    
+    
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(tidyverse)
+library(tidytext)
+library(tm)
+library(wordcloud)
+library(ggraph)
+library(igraph)
+library(quanteda)
+library(topicmodels)
+library(tidyr)
+library(plotly)
+library(RColorBrewer)
+library(kableExtra)
+library(SentimentAnalysis)
+library(syuzhet)
+library(tibble)
+library(dplyr)
+library(sentimentr)
+library(tidyverse)
+library(lubridate)
+library(zoo)
+library(scales)
+
+
+Data1 <- read.csv2("C:/Users/juliana.forero/Desktop/Alqueria/mentions.csv") 
+
+Data1$text <- as.character(Data1$text)
+Data1$Query.Name <- as.character(Data1$Query.Name)
+Data1$Title <- as.character(Data1$Title)
+Data1$Sentiment <- as.character(Data1$Sentiment)
+Data1$Page.Type <- as.character(Data1$Page.Type)
+Data1$Full.Name <- as.character(Data1$Full.Name)
+Data1$Gender <- as.character(Data1$Gender)
+
+```
+
+Visión General 
+===============================================================
+
+### Palabras más mencionadas
+
+
+```{r, echo=FALSE}
+
+set.seed(454)
+
+tidy_books <- Data1 %>% unnest_tokens(word, text)
+
+
+stop_word <- bind_rows(data_frame(word = tm::stopwords("spanish"),
+                                  lexicon = "SMART"), data.frame(word = c(c(1:5000), "ver",  "nhoy", "asi", "junto", "n", "rt", "pic.twitter.com", "bit.ly", "hoy", "tyc", "ey", "si", "ser", "solo", "raydmdl", "asi", "m", "rfvsrbnugg", "vs", "1,5", "1.500.000", "c", "9na", "rruldftfji", "t", "vhwhoaxvp5", "jthgsicy7b", "pgn_col", "s", "0", "36.000", "6onihuoc8x", "ncb41ud76y", "2vabf3t5hy", "00", "c4r0y3syzl", "oxdw6oy7wg", "ruluqcr2b7", "7caudpephj", "3209754897", "q9hays3vir", "2tk9ox8v33", "36.384", "6vtdatzagt", "link", "youtube.com", "danielsupereauribe", "twitter.com","jotace_42", "samper","watch", "instagram.com", "v", "dlvr.it","youtu.be","n2","p","n1","nsi","fnaraujor")))
+
+
+tidy_books <- tidy_books %>% anti_join(stop_word)
+
+count <- tidy_books %>% count(word, sort = TRUE)%>% mutate(Participacion=round((n/sum(n))*100,2)) 
+
+a <- tidy_books %>% count(word, sort = TRUE) %>% filter(n > 140) %>%  mutate(word = reorder(word, n)) %>% 
+  ggplot(aes(word, n, fill=word)) + geom_col() + xlab(NULL) + coord_flip()+ labs(x="Palabra",
+                                                                      y="Frecuencia de mención",
+                                                                      title="Frecuencia de palabras que aparecen en las menciones")
+
+ggplotly(a)
+
+
+```
+
+
+
+Tendencias {data-navmenu="Análisis de sentimientos"}
+===============================================================
+
+Column {data-width=300}
+------------------------------------------------------
+
+### Sentimiento más mencionado
+
+
+```{r, echo=FALSE}
+
+set.seed(454)
+
+download.file("https://raw.githubusercontent.com/jboscomendoza/rpubs/master/sentimientos_afinn/lexico_afinn.en.es.csv",
+              "lexico_afinn.en.es.csv")
+
+afinn <- read.csv("lexico_afinn.en.es.csv", stringsAsFactors = F, fileEncoding = "latin1") %>% 
+  tbl_df()
+
+tuits_afinn <- afinn %>% mutate(Tipo = ifelse(Puntuacion > 0, "Positiva", "Negativa"))
+
+a <- tidy_books %>% inner_join(tuits_afinn, by=c("word"="Palabra")) %>% count(word, sort=TRUE) %>% mutate(Participacion=round((n/sum(n))*100,2))%>%  mutate(Participacion=paste0(Participacion,"%"))
+
+
+kable(a,  caption = "Tabla de frecuencias") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), 
+                full_width = F,position = "center", 
+                font_size = 15)%>% row_spec(0, bold = T, color = "black", 
+                                            background = "darksalmon")
+
+```
+
+Column {data-width=700}
+------------------------------------------------------
+
+### Frecuencia de palabras asociadas a un sentimiento según léxico afin en español, que aparecen en las menciones
+
+
+```{r, echo=FALSE}
+
+a <- tidy_books %>% inner_join(tuits_afinn, by=c("word"="Palabra")) %>% count(word, sort=TRUE) %>%
+  filter(n > 70) %>%
+  mutate(word = reorder(word,n)) %>% 
+  ggplot(aes(word,n,fill=word)) + xlab(NULL) + coord_flip() + geom_col()+ labs(x="Palabra",
+                                                                     y="Frecuencia de palabra",
+                                                                     title="Gráfico de frecuencias de menciones")
+
+
+ggplotly(a)
+
+```
+
+
+Wordcloud {data-navmenu="Análisis de sentimientos"}
+===============================================================
+
+
+
+### Nube de palabras
+
+
+```{r, echo=FALSE}
+
+tidy_books %>% anti_join(stop_word) %>% count(word) %>% 
+  with(wordcloud(word, n, scale=c(9,.5), max.words = 100, 
+                   colors = RColorBrewer::brewer.pal(8,"Dark2")))
+
+
+
+```
+
+
+Por género {data-navmenu="Análisis de sentimientos"}
+===============================================================
+
+Column {data-width=500}
+------------------------------------------------------
+
+
+### Sentimientos positivos según género
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+Data1 <- read.csv2("C:/Users/juliana.forero/Desktop/Alqueria/mentions.csv") 
+
+Data1$text <- as.character(Data1$text)
+
+tema_graf <-
+  theme_minimal() +
+  theme(text = element_text(family = "serif"),
+        panel.grid.minor = element_blank(),
+        strip.background = element_rect(fill = "#EBEBEB", colour = NA),
+        legend.position = "none",
+        legend.box.background = element_rect(fill = "#EBEBEB", colour = NA))
+
+
+download.file("https://raw.githubusercontent.com/jboscomendoza/rpubs/master/sentimientos_afinn/lexico_afinn.en.es.csv",
+              "lexico_afinn.en.es.csv")
+
+afinn <- read.csv("lexico_afinn.en.es.csv", stringsAsFactors = F, fileEncoding = "latin1") %>% 
+  tbl_df()
+
+tuits <- 
+  Data1 %>%
+  separate(Date, into = c("Fecha", "Hora"), sep = " ") %>%
+  separate(Fecha, into = c("Año", "Mes", "Dia"), sep = "-",
+           remove = FALSE) %>%
+  mutate(Fecha = ymd(Fecha),
+         Semana = week(Fecha) %>% as.factor(),
+         text = tolower(text))
+
+tuits_afinn <- 
+  tuits %>%
+  unnest_tokens(input = "text", output = "Palabra") %>%
+  inner_join(afinn, ., by = "Palabra") %>%
+  mutate(Tipo = ifelse(Puntuacion > 0, "Positiva", "Negativa")) %>% 
+  rename("Genero" = Gender)
+
+
+
+
+map(c("Positiva"), function(sentimiento) {
+  tuits_afinn %>%
+    filter(Tipo ==  sentimiento) %>%
+    group_by(Genero) %>%
+    count(Palabra, sort = T) %>%
+    top_n(n = 10, wt = n) %>%
+    ggplot() +
+    aes(Palabra, n, fill = Genero) +
+    geom_col() +
+    facet_wrap("Genero", scales = "free") +
+    scale_y_continuous(expand = c(0, 0)) +
+    coord_flip() +
+    labs(title = sentimiento) +
+    tema_graf
+})
+
+
+```
+
+
+Column {data-width=500}
+------------------------------------------------------
+
+
+### Sentimientos negativos según género
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+map(c("Negativa"), function(sentimiento) {
+  tuits_afinn %>%
+    filter(Tipo ==  sentimiento) %>%
+    group_by(Genero) %>%
+    count(Palabra, sort = T) %>%
+    top_n(n = 10, wt = n) %>%
+    ggplot() +
+    aes(Palabra, n, fill = Genero) +
+    geom_col() +
+    facet_wrap("Genero", scales = "free") +
+    scale_y_continuous(expand = c(0, 0)) +
+    coord_flip() +
+    labs(title = sentimiento) +
+    tema_graf
+})
+
+
+```
+
+
+Bigramos {data-navmenu="Términos relacionados"}
+===============================================================
+
+Column {.tabset}
+------------------------------------------------------
+
+### Nube de términos relacionados
+
+
+```{r, echo=FALSE}
+
+bigram <- Data1 %>% unnest_tokens(word, text, token = "ngrams", n = 20) %>% count(word, sort = TRUE)
+
+bigram_sep <- bigram %>%  separate(word, c("word1", "word2"), sep = " ")
+
+bigram_filt <- bigram_sep %>%  filter(!word1 %in% stop_word$word) %>%  
+  filter(!word2 %in% stop_word$word)
+
+bigram_counts <- bigram_filt %>% count(word1, word2, sort = TRUE)
+
+bigram_unit <- bigram_filt %>%  unite(word, word1, word2, sep = " ")
+
+bigram_graph <- bigram_counts %>% filter(n > 2) %>%  graph_from_data_frame()
+
+set.seed(2019)
+
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+ggraph(bigram_graph, layout = "fr") + geom_edge_link(aes(edge_alpha = n), show.legend = FALSE, arrow = a, end_cap = circle(.07, 'inches')) + 
+  geom_node_point(color = "lightpink", size = 2) + geom_node_text(aes(label = name, vjust = 1, hjust = 1))+
+    theme_void() 
+
+```
+
+
+
+### Keywords en contexto "crema"
+
+
+```{r, echo=FALSE}
+
+## Corpus
+mycorpus <- corpus(Data1$text)
+mytoks <- tokens(mycorpus, remove_punct = TRUE)
+mytoks <- tokens_remove(mytoks, stop_word$word)
+my_dfm <- dfm(mytoks, remove = stopwords("spanish"), stem = TRUE, remove_punct = TRUE, remove_numbers = TRUE)
+
+
+a <- kwic(mycorpus, "crema")
+
+
+#a <- a %>% mutate(Participacion=round((n/sum(n))*100,2))%>%  mutate(Porcentaje_Markov=paste0(Porcentaje_Markov,"%"))
+
+
+kable(a,  caption = "Menciones relacionadas con la palabra crema") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), 
+                full_width = F,position = "center", 
+                font_size = 15)%>% row_spec(0, bold = T, color = "black", 
+                                            background = "darksalmon")
+
+```
+
+
+### Menciones relacionadas con Crema
+
+
+```{r, echo=FALSE}
+a <- a %>% group_by(pre, post) %>% tally() %>% filter(n>1) %>% arrange(desc(n))
+
+
+b <-  ggplot(a, aes(x=pre,y=n,fill=post)) + labs(x="Frase",y="Frecuencia de aparición",title="Frecuencia de Keywords relacionadas con la palabra Crema")+
+  geom_bar(stat="identity")+theme_minimal()+coord_flip()+theme(legend.position = 'none') #+scale_x_discrete(limit=c('Feb','Mar','Abr','May','Jun','Jul'))
+
+
+ggplotly(b)
+```
+
+
+
+### Keywords en contexto "recetas"
+
+
+```{r, echo=FALSE}
+
+## Corpus
+mycorpus <- corpus(Data1$text)
+mytoks <- tokens(mycorpus, remove_punct = TRUE)
+mytoks <- tokens_remove(mytoks, stop_word$word)
+my_dfm <- dfm(mytoks, remove = stopwords("spanish"), stem = TRUE, remove_punct = TRUE, remove_numbers = TRUE)
+
+
+a <- kwic(mycorpus, "recetas")
+
+
+#a <- a %>% mutate(Participacion=round((n/sum(n))*100,2))%>%  mutate(Porcentaje_Markov=paste0(Porcentaje_Markov,"%"))
+
+
+kable(a,  caption = "Menciones relacionadas con la palabra recetas") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), 
+                full_width = F,position = "center", 
+                font_size = 15)%>% row_spec(0, bold = T, color = "black", 
+                                            background = "darksalmon")
+
+```
+
+
+### Menciones relacionadas con Recetas
+
+
+```{r, echo=FALSE}
+a <- a %>% group_by(pre, post) %>% tally() %>% filter(n>3) %>% arrange(desc(n))
+
+
+b <-  ggplot(a, aes(x=pre,y=n,fill=post)) + labs(x="Frase",y="Frecuencia de aparición",title="Frecuencia de Keywords relacionadas con la palabra Recetas")+
+  geom_bar(stat="identity")+theme_minimal()+coord_flip()+theme(legend.position = 'none') #+scale_x_discrete(limit=c('Feb','Mar','Abr','May','Jun','Jul'))
+
+
+ggplotly(b)
+```
+
+
+
+Tópicos {data-navmenu="Modelo de palabras"}
+===============================================================
+
+Column {data-width=400}
+------------------------------------------------------
+
+### Tópicos identificados por Latent Dirichlet Allocation (LDA)
+  
+```{r, echo=FALSE}
+
+# Modelo
+quant_dfm <- dfm_trim(my_dfm, min_termfreq = 12)
+set.seed(100)
+a <- if (require(topicmodels)) {
+  my_lda_fit20 <- LDA(convert(quant_dfm, to = "topicmodels"), k = 6)
+  get_terms(my_lda_fit20, 8)
+}
+
+
+kable(a,  caption = "Topics") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), 
+                full_width = F,position = "center", 
+                font_size = 15)%>% row_spec(0, bold = T, color = "black", 
+                                            background = "darksalmon")
+
+```
+
+
+Column {data-width=600}
+------------------------------------------------------
+
+### Probabilidad de aparición de términos más especiales en los topics
+
+```{r, echo=FALSE}
+set.seed(100)
+ap_topic <- tidy(my_lda_fit20, matrix = "beta")
+
+ap_top_terms <- ap_topic %>%  group_by(topic) %>%  top_n(10, beta) %>%  ungroup() %>% arrange(topic, -beta)
+set.seed(100)
+ap_top_terms %>%  mutate(term = reorder(term, beta)) %>% 
+  ggplot(aes(term, beta, fill = factor(topic))) + geom_col(show.legend = FALSE) + 
+  facet_wrap(~topic, scales = "free") + coord_flip()+ 
+  labs(title="Topics identificados")
+
+```
+
+
